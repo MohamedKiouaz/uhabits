@@ -18,6 +18,7 @@
  */
 package org.isoron.uhabits.core.models
 
+import org.isoron.platform.time.LocalDate
 import org.isoron.platform.time.getToday
 import org.isoron.uhabits.core.BaseUnitTest
 import kotlin.test.Test
@@ -79,6 +80,27 @@ class HabitTest : BaseUnitTest() {
         h.originalEntries.add(Entry(getToday(), Entry.NO))
         h.recompute()
         assertTrue(h.isEnteredToday())
+    }
+
+    @Test
+    fun test_findNextDueDate_boolean() {
+        val h = modelFactory.buildHabit()
+        h.frequency = Frequency(1, 3)
+        h.originalEntries.add(Entry(LocalDate(2015, 1, 21), Entry.YES_MANUAL))
+        h.recompute()
+
+        assertEquals(LocalDate(2015, 1, 24), h.findNextDueDate(LocalDate(2015, 1, 22)))
+        assertEquals(LocalDate(2015, 1, 24), h.findNextDueDate(LocalDate(2015, 1, 23)))
+        assertEquals(LocalDate(2015, 1, 24), h.findNextDueDate(LocalDate(2015, 1, 24)))
+    }
+
+    @Test
+    fun test_findNextDueDate_numerical() {
+        val h = modelFactory.buildHabit()
+        h.type = HabitType.NUMERICAL
+        h.recompute()
+
+        assertEquals(null, h.findNextDueDate(LocalDate(2015, 1, 24)))
     }
 
     @Test

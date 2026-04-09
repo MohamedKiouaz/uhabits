@@ -19,6 +19,7 @@
 package org.isoron.uhabits.core.models
 
 import org.isoron.platform.time.getToday
+import org.isoron.platform.time.LocalDate
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -74,6 +75,23 @@ data class Habit(
         val today = getToday()
         val value = computedEntries.get(today).value
         return value != Entry.UNKNOWN
+    }
+
+    fun findNextDueDate(
+        startDate: LocalDate = getToday(),
+        maxDaysAhead: Int = maxOf(365, frequency.denominator * 2)
+    ): LocalDate? {
+        if (isNumerical) return null
+
+        var date = startDate
+        repeat(maxDaysAhead + 1) {
+            if (computedEntries.get(date).value != Entry.YES_AUTO) {
+                return date
+            }
+            date = date.plus(1)
+        }
+
+        return null
     }
 
     fun recompute() {
