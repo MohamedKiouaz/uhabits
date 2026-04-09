@@ -27,6 +27,7 @@ import android.os.Build.VERSION.SDK_INT
 import android.os.Handler
 import android.os.Looper
 import android.text.TextUtils
+import android.text.format.DateUtils
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
@@ -38,8 +39,10 @@ import me.tatarka.inject.annotations.Inject
 import org.isoron.platform.gui.toInt
 import org.isoron.platform.time.LocalDate
 import org.isoron.platform.time.getToday
+import org.isoron.platform.time.toGregorianCalendar
 import org.isoron.uhabits.R
 import org.isoron.uhabits.activities.common.views.RingView
+import org.isoron.uhabits.core.models.Entry
 import org.isoron.uhabits.core.models.Habit
 import org.isoron.uhabits.core.models.ModelObservable
 import org.isoron.uhabits.core.ui.screens.habits.list.ListHabitsBehavior
@@ -47,6 +50,7 @@ import org.isoron.uhabits.inject.ActivityContext
 import org.isoron.uhabits.utils.currentTheme
 import org.isoron.uhabits.utils.dp
 import org.isoron.uhabits.utils.sres
+import java.util.Locale
 
 @Inject
 class HabitCardViewFactory(
@@ -71,6 +75,13 @@ class HabitCardView(
         set(value) {
             checkmarkPanel.buttonCount = value
             numberPanel.buttonCount = value
+            nextDueLabel.layoutParams = LinearLayout.LayoutParams(
+                checkmarkButtonWidth * value,
+                WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            updateNextDueLabel()
         }
 
     var dataOffset = 0
@@ -78,6 +89,7 @@ class HabitCardView(
             field = value
             checkmarkPanel.dataOffset = value
             numberPanel.dataOffset = value
+            updateNextDueLabel()
         }
 
     var habit: Habit? = null
@@ -104,10 +116,12 @@ class HabitCardView(
         }
 
     var values
-        get() = checkmarkPanel.values
+        get() = allValues
         set(values) {
+            allValues = values
             checkmarkPanel.values = values
             numberPanel.values = values.map { it / 1000.0 }.toDoubleArray()
+            updateNextDueLabel()
         }
 
     var threshold: Double
@@ -125,9 +139,12 @@ class HabitCardView(
 
     var checkmarkPanel: CheckmarkPanelView
     private var numberPanel: NumberPanelView
+    private val nextDueLabel: TextView
     private var innerFrame: LinearLayout
     private var label: TextView
     private var scoreRing: RingView
+    private var allValues = IntArray(0)
+    private val checkmarkButtonWidth = resources.getDimensionPixelSize(R.dimen.checkmarkWidth)
 
     private var currentToggleTaskId = 0
 
@@ -183,6 +200,13 @@ class HabitCardView(
             }
         }
 
+        nextDueLabel = TextView(context).apply {
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            maxLines = 2
+            ellipsize = TextUtils.TruncateAt.END
+            layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT)
+        }
+
         innerFrame = LinearLayout(context).apply {
             gravity = Gravity.CENTER_VERTICAL
             orientation = LinearLayout.HORIZONTAL
@@ -193,6 +217,7 @@ class HabitCardView(
             addView(label)
             addView(checkmarkPanel)
             addView(numberPanel)
+            addView(nextDueLabel)
 
             setOnTouchListener { v, event ->
                 v.background.setHotspot(event.x, event.y)
@@ -279,23 +304,17 @@ class HabitCardView(
         scoreRing.apply {
             setColor(c)
         }
+        nextDueLabel.setTextColor(sres.getColor(R.attr.contrast60))
         checkmarkPanel.apply {
             color = c
-            visibility = when (h.isNumerical) {
-                true -> View.GONE
-                false -> View.VISIBLE
-            }
         }
         numberPanel.apply {
             color = c
             units = h.unit
             targetType = h.targetType
             threshold = h.targetValue
-            visibility = when (h.isNumerical) {
-                true -> View.VISIBLE
-                false -> View.GONE
-            }
         }
+        updateNextDueLabel()
     }
 
     private fun triggerRipple(x: Float, y: Float) {
@@ -314,6 +333,55 @@ class HabitCardView(
             false -> R.drawable.ripple
         }
         innerFrame.setBackgroundResource(background)
+    }
+
+    private fun updateNextDueLabel() {
+        val currentHabit = habit ?: return
+
+        val shouldShowNextDueLabel = !currentHabit.isNumerical &&
+            buttonCount > 0 &&
+            (0 until buttonCount).all { index ->
+                val visibleIndex = index + dataOffset
+                visibleIndex < allValues.size && allValues[visibleIndex] == Entry.YES_AUTO
+            }
+
+        if (!shouldShowNextDueLabel) {
+            checkmarkPanel.visibility = if (currentHabit.isNumerical) View.GONE else View.VISIBLE
+            numberPanel.visibility = if (currentHabit.isNumerical) View.VISIBLE else View.GONE
+            nextDueLabel.visibility = View.GONE
+            return
+        }
+
+        val nextDueDate = currentHabit.findNextDueDate(getToday()) ?: run {
+            checkmarkPanel.visibility = View.VISIBLE
+            numberPanel.visibility = View.GONE
+            nextDueLabel.visibility = View.GONE
+            return
+        }
+
+        nextDueLabel.text = resources.getString(
+            R.string.next_due_date,
+            formatNextDueDate(nextDueDate)
+        )
+        checkmarkPanel.visibility = View.GONE
+        numberPanel.visibility = View.GONE
+        nextDueLabel.visibility = View.VISIBLE
+    }
+
+    private fun formatNextDueDate(date: LocalDate): String {
+        val flags = if (date.year == getToday().year) {
+            DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_MONTH or DateUtils.FORMAT_NO_YEAR
+        } else {
+            DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_MONTH or DateUtils.FORMAT_SHOW_YEAR
+        }
+
+        return DateUtils.formatDateTime(
+            context,
+            date.toGregorianCalendar().timeInMillis,
+            flags
+        ).replaceFirstChar { ch ->
+            if (ch.isLowerCase()) ch.titlecase(Locale.getDefault()) else ch.toString()
+        }
     }
 
     companion object {
