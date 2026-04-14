@@ -18,21 +18,22 @@
  */
 package org.isoron.uhabits.core
 
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.isoron.platform.io.Database
 import org.isoron.platform.io.DatabaseOpener
 import org.isoron.platform.io.FileOpener
 import org.isoron.platform.io.TestDatabaseHelper
 import org.isoron.platform.io.UserFile
-import org.isoron.platform.io.createTestDatabaseOpener
+import org.isoron.platform.io.createTestDatabaseOpenerSuspend
 import org.isoron.platform.io.createTestFileOpener
-import org.isoron.platform.runSuspend
 import org.isoron.platform.time.LocalDate
 import org.isoron.platform.time.setToday
 import org.isoron.uhabits.core.commands.CommandRunner
 import org.isoron.uhabits.core.models.HabitList
 import org.isoron.uhabits.core.models.ModelFactory
 import org.isoron.uhabits.core.models.memory.MemoryModelFactory
-import org.isoron.uhabits.core.tasks.SingleThreadTaskRunner
+import org.isoron.uhabits.core.tasks.CoroutineTaskRunner
+import org.isoron.uhabits.core.tasks.TaskRunner
 import org.isoron.uhabits.core.test.HabitFixtures
 import kotlin.test.BeforeTest
 
@@ -40,10 +41,16 @@ open class BaseUnitTest {
     protected open lateinit var habitList: HabitList
     protected lateinit var fixtures: HabitFixtures
     protected lateinit var modelFactory: ModelFactory
-    protected lateinit var taskRunner: SingleThreadTaskRunner
+    protected lateinit var taskRunner: TaskRunner
     protected open lateinit var commandRunner: CommandRunner
     protected val fileOpener: FileOpener = createTestFileOpener()
-    protected val databaseOpener: DatabaseOpener = createTestDatabaseOpener()
+    private var _databaseOpener: DatabaseOpener? = null
+    protected suspend fun databaseOpener(): DatabaseOpener {
+        if (_databaseOpener == null) {
+            _databaseOpener = createTestDatabaseOpenerSuspend()
+        }
+        return _databaseOpener!!
+    }
 
     @BeforeTest
     open fun setUp() {
@@ -52,32 +59,35 @@ open class BaseUnitTest {
         habitList = memoryModelFactory.buildHabitList()
         fixtures = HabitFixtures(memoryModelFactory, habitList)
         modelFactory = memoryModelFactory
-        taskRunner = SingleThreadTaskRunner()
+        taskRunner = CoroutineTaskRunner(
+            mainDispatcher = UnconfinedTestDispatcher(),
+            ioDispatcher = UnconfinedTestDispatcher()
+        )
         commandRunner = CommandRunner(taskRunner)
     }
 
-    protected fun createTempDir(): UserFile = runSuspend {
+    protected suspend fun createTempDir(): UserFile {
         val dir = fileOpener.openUserFile("test-temp-dir-${tempFileCounter++}")
         dir.mkdirs()
-        dir
+        return dir
     }
 
-    protected fun copyResourceToTempFile(resourcePath: String): UserFile = runSuspend {
+    protected suspend fun copyResourceToTempFile(resourcePath: String): UserFile {
         val cleanPath = resourcePath.removePrefix("/")
         val tempFile = fileOpener.openUserFile("test-temp-${tempFileCounter++}")
         fileOpener.openResourceFile(cleanPath).copyTo(tempFile)
-        tempFile
+        return tempFile
     }
 
-    protected fun openDatabaseResource(resourcePath: String): Database = runSuspend {
+    protected suspend fun openDatabaseResource(resourcePath: String): Database {
         val tempFile = copyResourceToTempFile(resourcePath)
-        databaseOpener.open(tempFile.pathString)
+        return databaseOpener().open(tempFile.pathString)
     }
 
     companion object {
         private var tempFileCounter = 0
 
-        fun buildMemoryDatabase(): Database {
+        suspend fun buildMemoryDatabase(): Database {
             return TestDatabaseHelper.createEmptyDatabase()
         }
     }

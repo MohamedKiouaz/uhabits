@@ -26,14 +26,15 @@ import dev.mokkery.matcher.any
 import dev.mokkery.mock
 import dev.mokkery.spy
 import dev.mokkery.verify
+import kotlinx.coroutines.test.runTest
 import org.isoron.platform.io.UserFile
-import org.isoron.platform.runSuspend
 import org.isoron.platform.time.getToday
 import org.isoron.uhabits.core.BaseUnitTest
 import org.isoron.uhabits.core.models.Entry
 import org.isoron.uhabits.core.models.Habit
 import org.isoron.uhabits.core.preferences.Preferences
 import org.isoron.uhabits.core.ui.callbacks.NumberPickerCallback
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -53,6 +54,7 @@ class ListHabitsBehaviorTest : BaseUnitTest() {
 
     private val bugReporter: ListHabitsBehavior.BugReporter = mock()
 
+    @BeforeTest
     override fun setUp() {
         super.setUp()
         habit1 = fixtures.createShortHabit()
@@ -89,21 +91,23 @@ class ListHabitsBehaviorTest : BaseUnitTest() {
     }
 
     @Test
-    fun testOnExportCSV() {
+    fun testOnExportCSV() = runTest {
         val outputDir = createTempDir()
         every { dirFinder.getCSVOutputDir() } returns outputDir
         behavior.onExportCSV()
+        taskRunner.await()
         verify { screen.showSendFileScreen(any()) }
-        val files = runSuspend { outputDir.listFiles() }
+        val files = outputDir.listFiles()
         assertEquals(1, files!!.size)
     }
 
     @Test
-    fun testOnExportCSV_fail() {
+    fun testOnExportCSV_fail() = runTest {
         val mockDir: UserFile = mock()
         every { mockDir.resolve(any()) } throws RuntimeException("not writable")
         every { dirFinder.getCSVOutputDir() } returns mockDir
         behavior.onExportCSV()
+        taskRunner.await()
         verify { screen.showMessage(ListHabitsBehavior.Message.COULD_NOT_EXPORT) }
     }
 

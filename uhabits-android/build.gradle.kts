@@ -44,6 +44,12 @@ android {
     namespace = "org.isoron.uhabits"
     compileSdk = 36
 
+    sourceSets {
+        getByName("main") {
+            assets.srcDirs("src/main/assets", "../uhabits-core/assets/main")
+        }
+    }
+
     defaultConfig {
         versionCode = 20301
         versionName = "2.3.1"
@@ -84,13 +90,19 @@ android {
         sourceCompatibility(JavaVersion.VERSION_17)
     }
 
-    kotlinOptions.jvmTarget = JavaVersion.VERSION_17.toString()
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
+    }
     buildFeatures.viewBinding = true
     lint.abortOnError = false
 }
 
 mokkery {
     defaultMockMode.set(dev.mokkery.MockMode.autofill)
+    stubs.allowClassInheritance.set(true)
+    stubs.allowConcreteClassInstantiation.set(true)
 }
 
 dependencies {

@@ -22,9 +22,11 @@ import dev.mokkery.answering.returns
 import dev.mokkery.every
 import dev.mokkery.mock
 import dev.mokkery.verify
-import org.isoron.platform.runSuspend
+import kotlinx.coroutines.test.runTest
 import org.isoron.uhabits.core.BaseUnitTest
 import org.isoron.uhabits.core.models.Habit
+import org.isoron.uhabits.core.tasks.CoroutineTaskRunner
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -34,6 +36,7 @@ class ShowHabitMenuPresenterTest : BaseUnitTest() {
     private lateinit var habit: Habit
     private lateinit var menu: ShowHabitMenuPresenter
 
+    @BeforeTest
     override fun setUp() {
         super.setUp()
         system = mock()
@@ -56,11 +59,12 @@ class ShowHabitMenuPresenterTest : BaseUnitTest() {
     }
 
     @Test
-    fun testOnExport() {
+    fun testOnExport() = runTest {
         val outputDir = createTempDir()
         every { system.getCSVOutputDir() } returns outputDir
         menu.onExportCSV()
-        val files = runSuspend { outputDir.listFiles() }
+        (taskRunner as CoroutineTaskRunner).await()
+        val files = outputDir.listFiles()
         assertEquals(1, files!!.size)
     }
 }

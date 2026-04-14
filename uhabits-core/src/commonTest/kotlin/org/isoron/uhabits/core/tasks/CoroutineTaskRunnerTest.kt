@@ -18,31 +18,35 @@
  */
 package org.isoron.uhabits.core.tasks
 
-class SingleThreadTaskRunner : TaskRunner {
-    override val activeTaskCount: Int
-        get() = 0
+import dev.mokkery.mock
+import dev.mokkery.verify.VerifyMode.Companion.order
+import dev.mokkery.verifySuspend
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import org.isoron.uhabits.core.BaseUnitTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
 
-    private val listeners: MutableList<TaskRunner.Listener> = mutableListOf()
-    override fun addListener(listener: TaskRunner.Listener) {
-        listeners.add(listener)
+class CoroutineTaskRunnerTest : BaseUnitTest() {
+    private lateinit var runner: CoroutineTaskRunner
+    private var task: Task = mock()
+
+    @BeforeTest
+    override fun setUp() {
+        super.setUp()
+        runner = CoroutineTaskRunner(
+            mainDispatcher = UnconfinedTestDispatcher(),
+            ioDispatcher = UnconfinedTestDispatcher()
+        )
     }
 
-    override fun execute(task: Task) {
-        for (l in listeners) l.onTaskStarted(task)
-        if (!task.isCanceled()) {
-            task.onAttached(this)
+    @Test
+    fun test() {
+        runner.execute(task)
+        verifySuspend(order) {
+            task.onAttached(runner)
             task.onPreExecute()
             task.doInBackground()
             task.onPostExecute()
         }
-        for (l in listeners) l.onTaskFinished(task)
-    }
-
-    override fun publishProgress(task: Task, progress: Int) {
-        task.onProgressUpdate(progress)
-    }
-
-    override fun removeListener(listener: TaskRunner.Listener) {
-        listeners.remove(listener)
     }
 }
